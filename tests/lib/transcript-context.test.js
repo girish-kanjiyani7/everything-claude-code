@@ -201,6 +201,11 @@ test('env window override still wins over the known-model table (#2461)', () => 
   }
 });
 
+test('does not match hypothetical smaller tiers sharing a known-family prefix (#2461)', () => {
+  assert.strictEqual(resolveContextWindowTokens(50000, 'claude-fable-5-mini'), STANDARD_CONTEXT_WINDOW_TOKENS);
+  assert.strictEqual(resolveContextWindowTokens(50000, 'claude-mythos-5-haiku-20260201'), STANDARD_CONTEXT_WINDOW_TOKENS);
+});
+
 test('keeps the 200k default for unknown model ids at low token counts (no false positives, #2461)', () => {
   assert.strictEqual(resolveContextWindowTokens(187000, 'claude-haiku-4-5-20251001'), STANDARD_CONTEXT_WINDOW_TOKENS);
 });

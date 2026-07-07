@@ -29,14 +29,30 @@ const MAX_TOKEN_SETTING = 10000000;
 const LARGE_WINDOW_MODEL_MARKER = '[1m]';
 
 // Known large-window model families whose ids carry no `[1m]` marker (#2461).
-// Substring match against the model id — covers dated/region-prefixed variants
-// (e.g. `us.anthropic.claude-fable-5-20260115-v1:0`). Checked in order, first
-// match wins. Best-effort and expected to lag new releases; the env override
-// remains the escape hatch for unlisted models.
+// Matched boundary-aware against the model id — covers dated/region-prefixed
+// variants (e.g. `us.anthropic.claude-fable-5-20260115-v1:0`) without matching
+// hypothetical smaller tiers sharing the prefix (e.g. `claude-fable-5-mini`).
+// Checked in order, first match wins. Best-effort and expected to lag new
+// releases; the env override remains the escape hatch for unlisted models.
 const KNOWN_MODEL_WINDOW_TOKENS = [
   ['claude-fable-5', LARGE_CONTEXT_WINDOW_TOKENS],
   ['claude-mythos-5', LARGE_CONTEXT_WINDOW_TOKENS]
 ];
+
+/**
+ * True when `model` contains `familyId` ending at a token boundary: end of id,
+ * a delimiter (`[`, `:`, `.`), or a dated/versioned suffix (`-20260115`).
+ * Alphanumeric continuations and letter suffixes (`-mini`) are different
+ * models, possibly with smaller windows, and must not match.
+ */
+function isKnownModelFamilyMatch(model, familyId) {
+  const start = model.indexOf(familyId);
+  if (start === -1) {
+    return false;
+  }
+  const rest = model.slice(start + familyId.length);
+  return !/^[A-Za-z0-9]/.test(rest) && !/^-[A-Za-z]/.test(rest);
+}
 
 /**
  * Read the trailing `tailBytes` of a file as UTF-8.
@@ -164,7 +180,7 @@ function resolveContextWindowTokens(tokens, model) {
   // Large-window model families without a [1m] marker fall through the checks
   // above and would be misreported against the 200k default (#2461).
   if (typeof model === 'string') {
-    const known = KNOWN_MODEL_WINDOW_TOKENS.find(([idSubstring]) => model.includes(idSubstring));
+    const known = KNOWN_MODEL_WINDOW_TOKENS.find(([familyId]) => isKnownModelFamilyMatch(model, familyId));
     if (known) {
       return known[1];
     }
