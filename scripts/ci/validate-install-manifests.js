@@ -137,7 +137,8 @@ function validateInstallManifests() {
   const skillsRoot = path.join(REPO_ROOT, 'skills');
   if (fs.existsSync(skillsRoot)) {
     for (const entry of fs.readdirSync(skillsRoot, { withFileTypes: true })) {
-      if (!entry.isDirectory() || !fs.existsSync(path.join(skillsRoot, entry.name, 'SKILL.md'))) {
+      // Skip hidden directories, matching validate-skills.js discovery.
+      if (!entry.isDirectory() || entry.name.startsWith('.') || !fs.existsSync(path.join(skillsRoot, entry.name, 'SKILL.md'))) {
         continue;
       }
 

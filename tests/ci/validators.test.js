@@ -2941,6 +2941,9 @@ function runTests() {
     fs.writeFileSync(path.join(testDir, 'skills', 'orphan-skill', 'SKILL.md'), '# orphan\n');
     // A non-skill directory (no SKILL.md) must NOT be flagged.
     fs.mkdirSync(path.join(testDir, 'skills', 'shared-assets'), { recursive: true });
+    // A hidden directory must NOT be flagged even if it contains a SKILL.md.
+    fs.mkdirSync(path.join(testDir, 'skills', '.hidden-skill'), { recursive: true });
+    fs.writeFileSync(path.join(testDir, 'skills', '.hidden-skill', 'SKILL.md'), '# hidden\n');
 
     const result = runValidatorWithDirs('validate-install-manifests', {
       REPO_ROOT: testDir,
@@ -2955,6 +2958,7 @@ function runTests() {
     assert.ok(result.stderr.includes('skills/orphan-skill'), 'Should name the orphaned skill');
     assert.ok(!result.stderr.includes('skills/security-review'), 'Should not flag referenced skills');
     assert.ok(!result.stderr.includes('shared-assets'), 'Should not flag directories without SKILL.md');
+    assert.ok(!result.stderr.includes('.hidden-skill'), 'Should not flag hidden directories');
     cleanupTestDir(testDir);
   })) passed++; else failed++;
 
