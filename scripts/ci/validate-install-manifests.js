@@ -16,12 +16,17 @@ const COMPONENTS_MANIFEST_PATH = path.join(REPO_ROOT, 'manifests/install-compone
 const MODULES_SCHEMA_PATH = path.join(REPO_ROOT, 'schemas/install-modules.schema.json');
 const PROFILES_SCHEMA_PATH = path.join(REPO_ROOT, 'schemas/install-profiles.schema.json');
 const COMPONENTS_SCHEMA_PATH = path.join(REPO_ROOT, 'schemas/install-components.schema.json');
+const CURATED_SKILLS_DIR = path.join(REPO_ROOT, 'skills');
+// Empty by default; add only curated skills that are intentionally unshipped.
+const INTENTIONALLY_UNSHIPPED_SKILL_IDS = new Set([
+  'skill-comply' // meta/measurement dev-skill; ships committed .pyc artifacts and a nested .gitignore, revisit after packaging cleanup
+]);
 const COMPONENT_FAMILY_PREFIXES = {
   baseline: 'baseline:',
   language: 'lang:',
   framework: 'framework:',
   capability: 'capability:',
-  locale: 'locale:',
+  locale: 'locale:'
 };
 
 function readJson(filePath, label) {
@@ -36,6 +41,18 @@ function normalizeRelativePath(relativePath) {
   return String(relativePath).replace(/\\/g, '/').replace(/\/+$/, '');
 }
 
+function isCuratedSkillReferenced(claimedPaths, skillId) {
+  const skillRoot = `skills/${skillId}`;
+
+  for (const claimedPath of claimedPaths.keys()) {
+    if (claimedPath === skillRoot || claimedPath.startsWith(`${skillRoot}/`)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function validateSchema(ajv, schemaPath, data, label) {
   const schema = readJson(schemaPath, `${label} schema`);
   const validate = ajv.compile(schema);
@@ -43,9 +60,7 @@ function validateSchema(ajv, schemaPath, data, label) {
 
   if (!valid) {
     for (const error of validate.errors) {
-      console.error(
-        `ERROR: ${label} schema: ${error.instancePath || '/'} ${error.message}`
-      );
+      console.error(`ERROR: ${label} schema: ${error.instancePath || '/'} ${error.message}`);
     }
     return true;
   }
@@ -114,16 +129,12 @@ function validateInstallManifests() {
 
       // All module paths must exist; no optional/generated paths in manifests
       if (!fs.existsSync(absolutePath)) {
-        console.error(
-          `ERROR: Module ${module.id} references missing path: ${normalizedPath}`
-        );
+        console.error(`ERROR: Module ${module.id} references missing path: ${normalizedPath}`);
         hasErrors = true;
       }
 
       if (claimedPaths.has(normalizedPath)) {
-        console.error(
-          `ERROR: Install path ${normalizedPath} is claimed by both ${claimedPaths.get(normalizedPath)} and ${module.id}`
-        );
+        console.error(`ERROR: Install path ${normalizedPath} is claimed by both ${claimedPaths.get(normalizedPath)} and ${module.id}`);
         hasErrors = true;
       } else {
         claimedPaths.set(normalizedPath, module.id);
@@ -134,30 +145,20 @@ function validateInstallManifests() {
   // Curated-skill coverage: every skills/<name> directory with a SKILL.md must
   // be claimed by some module, or full-profile installs silently skip it (#2431).
   // Per docs/SKILL-PLACEMENT-POLICY.md, curated skills are always manifest-referenced.
-  const skillsRoot = path.join(REPO_ROOT, 'skills');
-  if (fs.existsSync(skillsRoot)) {
-    for (const entry of fs.readdirSync(skillsRoot, { withFileTypes: true })) {
-      // Skip hidden directories, matching validate-skills.js discovery.
-      if (!entry.isDirectory() || entry.name.startsWith('.') || !fs.existsSync(path.join(skillsRoot, entry.name, 'SKILL.md'))) {
+  if (fs.existsSync(CURATED_SKILLS_DIR)) {
+    const entries = fs.readdirSync(CURATED_SKILLS_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) {
         continue;
       }
 
-      // Covered when the skill dir or any of its ancestors is a claimed path.
-      let covered = false;
-      for (let candidate = `skills/${entry.name}`; candidate; candidate = candidate.slice(0, candidate.lastIndexOf('/'))) {
-        if (claimedPaths.has(candidate)) {
-          covered = true;
-          break;
-        }
-        if (!candidate.includes('/')) {
-          break;
-        }
+      const skillMdPath = path.join(CURATED_SKILLS_DIR, entry.name, 'SKILL.md');
+      if (!fs.existsSync(skillMdPath)) {
+        continue;
       }
 
-      if (!covered) {
-        console.error(
-          `ERROR: Curated skill skills/${entry.name} is not referenced by any install module`
-        );
+      if (!INTENTIONALLY_UNSHIPPED_SKILL_IDS.has(entry.name) && !isCuratedSkillReferenced(claimedPaths, entry.name)) {
+        console.error(`ERROR: curated skill skills/${entry.name} is not referenced by any install module`);
         hasErrors = true;
       }
     }
@@ -178,16 +179,12 @@ function validateInstallManifests() {
     const seenModules = new Set();
     for (const moduleId of profile.modules) {
       if (!moduleIds.has(moduleId)) {
-        console.error(
-          `ERROR: Profile ${profileId} references unknown module ${moduleId}`
-        );
+        console.error(`ERROR: Profile ${profileId} references unknown module ${moduleId}`);
         hasErrors = true;
       }
 
       if (seenModules.has(moduleId)) {
-        console.error(
-          `ERROR: Profile ${profileId} contains duplicate module ${moduleId}`
-        );
+        console.error(`ERROR: Profile ${profileId} contains duplicate module ${moduleId}`);
         hasErrors = true;
       }
       seenModules.add(moduleId);
@@ -217,9 +214,7 @@ function validateInstallManifests() {
 
     const expectedPrefix = COMPONENT_FAMILY_PREFIXES[component.family];
     if (expectedPrefix && !component.id.startsWith(expectedPrefix)) {
-      console.error(
-        `ERROR: Component ${component.id} does not match expected ${component.family} prefix ${expectedPrefix}`
-      );
+      console.error(`ERROR: Component ${component.id} does not match expected ${component.family} prefix ${expectedPrefix}`);
       hasErrors = true;
     }
 
@@ -242,9 +237,7 @@ function validateInstallManifests() {
     process.exit(1);
   }
 
-  console.log(
-    `Validated ${modules.length} install modules, ${components.length} install components, and ${Object.keys(profiles).length} profiles`
-  );
+  console.log(`Validated ${modules.length} install modules, ${components.length} install components, and ${Object.keys(profiles).length} profiles`);
 }
 
 validateInstallManifests();

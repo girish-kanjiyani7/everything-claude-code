@@ -290,6 +290,7 @@
         "skills/eval-harness",
         "skills/hookify-rules",
         "skills/iterative-retrieval",
+        "skills/plan-canvas",
         "skills/plankton-code-quality",
         "skills/production-audit",
         "skills/skill-scout",
@@ -298,7 +299,6 @@
         "skills/tdd-workflow",
         "skills/verification-loop",
         "skills/windows-desktop-e2e",
-        "skills/agent-eval",
         "skills/agent-self-evaluation",
         "skills/architecture-decision-records",
         "skills/browser-qa",
@@ -352,7 +352,8 @@
         "skills/data-throughput-accelerator",
         "skills/latency-critical-systems",
         "skills/parallel-execution-optimizer",
-        "skills/recursive-decision-ledger"
+        "skills/recursive-decision-ledger",
+        "skills/agent-eval"
       ],
       "targets": [
         "claude",
