@@ -11,6 +11,8 @@ const { applyInstallPlan } = require('../../scripts/lib/install/apply');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
 const DEFAULT_INSTALL_APPLY_TIMEOUT_MS = process.platform === 'win32' ? 30000 : 10000;
+// Full-profile --json dry-run output exceeds Node's 1MB execFileSync default; sized well above observed peak (~1.1MB).
+const MAX_INSTALL_APPLY_OUTPUT_BYTES = 16 * 1024 * 1024;
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -40,7 +42,7 @@ function run(args = [], options = {}) {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
       timeout: options.timeout || DEFAULT_INSTALL_APPLY_TIMEOUT_MS,
-      maxBuffer: 16 * 1024 * 1024
+      maxBuffer: MAX_INSTALL_APPLY_OUTPUT_BYTES
     });
 
     return { code: 0, stdout, stderr: '' };
@@ -416,6 +418,7 @@ function runTests() {
         const parsed = JSON.parse(result.stdout);
         assert.strictEqual(parsed.dryRun, true);
         assert.ok(parsed.plan.selectedModuleIds.includes('workflow-quality'));
+        assert.ok(parsed.plan.selectedModuleIds.includes('healthcare-domain'));
         assert.ok(
           parsed.plan.operations.some(operation =>
             String(operation.sourceRelativePath || '')
@@ -424,6 +427,34 @@ function runTests() {
           ),
           'Full profile dry-run should include the delivery-gate skill'
         );
+        assert.ok(
+          parsed.plan.operations.some(operation =>
+            String(operation.sourceRelativePath || '')
+              .replace(/\\/g, '/')
+              .startsWith('skills/healthcare-cdss-patterns/')
+          ),
+          'Full profile dry-run should include the healthcare-cdss-patterns skill'
+        );
+      } finally {
+        cleanup(homeDir);
+        cleanup(projectDir);
+      }
+    })
+  )
+    passed++;
+  else failed++;
+
+  if (
+    test('full profile install writes a healthcare-domain SKILL.md to the install target', () => {
+      const homeDir = createTempDir('install-apply-home-');
+      const projectDir = createTempDir('install-apply-project-');
+
+      try {
+        const result = run(['--profile', 'full'], { cwd: projectDir, homeDir });
+        assert.strictEqual(result.code, 0, result.stderr);
+
+        const skillPath = path.join(homeDir, '.claude', 'skills', 'ecc', 'healthcare-cdss-patterns', 'SKILL.md');
+        assert.ok(fs.existsSync(skillPath), 'Full profile install should write healthcare-cdss-patterns/SKILL.md');
       } finally {
         cleanup(homeDir);
         cleanup(projectDir);
